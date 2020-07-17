@@ -528,6 +528,84 @@ def load_stripe82_data():
             get_stripe82(df.iloc[i], i, isshow=False)
 
 
+def fit_mag_borders():
+    from scipy.optimize import curve_fit
+    def func(x, b=2, c=10):
+        return np.exp((x) / b - c)
+
+    def func_err(x, a):
+        return 1.05 - np.exp((x - a) / 0.5)
+
+    def plot_mag_data(xdata, ydata, popt, ax):
+        xy = np.vstack([xdata, ydata])
+        ax.scatter(xdata, ydata, label='data', marker='.', facecolors='gray', alpha=0.1, edgecolors='none')
+        z = gaussian_kde(xy)(xy)
+        idx = z.argsort()
+        um, ume, z = xdata[idx], ydata[idx], z[idx]
+        idx_g = z.argsort()
+        um_good, ume_good, z_good = um[idx_g], ume[idx_g], z[idx_g]
+        ax.scatter(um_good, ume_good, c=np.log(z_good), cmap='Purples', s=2, edgecolors='',
+                   label='u:True')
+        x = np.linspace(15, mag_lim, 100)
+
+        ax.plot(x, func(x, *popt), 'r-')
+        # label='fit: b=%5.3f, c=%5.3f' % tuple(popt))
+
+        ax.plot(x, func(x, popt[0], popt[1] - 1) + 0.05, color='black', lw=2)
+        ax.plot(x, func(x, popt[0], popt[1] + 1) - 0.05, color='black', lw=2)
+        ax.plot(x, func_err(x, mag_lim), color='black', lw=2)
+        ax.set_xlim(xb_lim, xe_lim)
+        ax.set_ylim(yb_lim, ye_lim)
+
+    def set_cond(xdata, ydata):
+        cond1 = (xdata > xb_lim) & (xdata < xe_lim) & (ydata > yb_lim) & (ydata < ye_lim)
+        xdata = xdata[cond1]
+        ydata = ydata[cond1]
+        xdata = xdata[::10]
+        ydata = ydata[::10]
+        y_cond = func_err(xdata, mag_lim)
+        cond = ydata < y_cond
+        xdata = xdata[cond]
+        ydata = ydata[cond]
+        sort_ind = np.argsort(xdata)
+        xdata = xdata[sort_ind]
+        ydata = ydata[sort_ind]
+
+        popt, pcov = curve_fit(func, xdata, ydata, maxfev=5000)
+        print(popt)
+        high_cond = ydata < func(xdata, popt[0], popt[1] - 1)
+        xdata = xdata[high_cond]
+        ydata = ydata[high_cond]
+
+        return xdata, ydata, popt
+
+    sdss = pd.read_csv(f'new/sso_tot4g.csv.gz', nrows=100000)
+    fig = plt.figure(figsize=(6, 10))
+    ax1 = fig.add_subplot(511)
+    ax2 = fig.add_subplot(512)
+    ax3 = fig.add_subplot(513)
+    ax4 = fig.add_subplot(514)
+    ax5 = fig.add_subplot(515)
+
+    ux = sdss['psfMag_u'].to_numpy()
+    uy = sdss['psfMagErr_u'].to_numpy()
+    mag_lim = 24.2
+    xb_lim, xe_lim = 14, 28
+    yb_lim, ye_lim = 0, 1.2
+    ux, uy, pu = set_cond(ux, uy)
+    plot_mag_data(ux, uy, pu, ax=ax1)
+
+    gx = sdss['psfMag_g'].to_numpy()
+    gy = sdss['psfMagErr_g'].to_numpy()
+    mag_lim = 24.2
+    xb_lim, xe_lim = 14, 28
+    yb_lim, ye_lim = 0, 1.2
+    gx, gy, pg = set_cond(gx, gy)
+    plot_mag_data(gx, gy, pg, ax=ax2)
+
+    plt.show()
+
+
 if __name__ == '__main__':
     path = f'/media/gamer/Data/data/sdss/'
     # N = 10000
@@ -579,4 +657,5 @@ if __name__ == '__main__':
     # plot_velocity()
     # plot_offset()
 
-    load_stripe82_data()
+    # load_stripe82_data()
+    fit_mag_borders()
